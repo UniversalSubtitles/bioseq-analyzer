@@ -83,6 +83,81 @@ def parse_fasta(raw_text):
         records.append((header or "Unnamed sequence", "".join(chunks).upper()))
     return records
 
+STOP_CODONS = {"TAA", "TAG", "TGA"}
+
+
+def find_orfs(sequence, min_protein_length=30):
+    """Find open reading frames (ATG ... stop codon) in all six reading frames.
+
+    Each frame is scanned from left to right: at the first ATG we read codons
+    until a stop codon, record the ORF, then continue scanning after that stop.
+    ORFs with no stop codon before the sequence ends are ignored.
+    Positions are 1-based on the sequence as given. For minus-strand ORFs,
+    Start is larger than End because that strand is read right to left."""
+    seq_len = len(sequence)
+    orfs = []
+    for strand, strand_seq in (("+", sequence), ("-", reverse_complement(sequence))):
+        for frame in range(3):
+            i = frame
+            while i + 3 <= seq_len:
+                if strand_seq[i:i + 3] == "ATG":
+                    stop_index = None
+                    for j in range(i, seq_len - 2, 3):
+                        if strand_seq[j:j + 3] in STOP_CODONS:
+                            stop_index = j
+                            break
+                    if stop_index is None:
+                        break  # no stop codon downstream in this frame
+                    protein = translate(strand_seq[i:stop_index])
+                    if len(protein) >= min_protein_length:
+                        if strand == "+":
+                            start, end = i + 1, stop_index + 3
+                        else:
+                            start, end = seq_len - i, seq_len - stop_index - 2
+                        orfs.append({
+                            "Frame": f"{strand}{frame + 1}",
+                            "Start": start,
+                            "End": end,
+                            "Length (nt)": stop_index + 3 - i,
+                            "Length (aa)": len(protein),
+                            "Protein": protein,
+                        })
+                    i = stop_index  # resume scanning after this ORF's stop codon
+                i += 3
+    return sorted(orfs, key=lambda orf: orf["Length (aa)"], reverse=True)
+
+
+# Common type II restriction enzymes and their recognition sites.
+# All of these sites are palindromic: they read the same 5'->3' on both strands,
+# so searching one strand finds every site.
+RESTRICTION_ENZYMES = {
+    "BamHI": "GGATCC",
+    "EcoRI": "GAATTC",
+    "HindIII": "AAGCTT",
+    "KpnI": "GGTACC",
+    "NcoI": "CCATGG",
+    "NdeI": "CATATG",
+    "NotI": "GCGGCCGC",
+    "PstI": "CTGCAG",
+    "SacI": "GAGCTC",
+    "SmaI": "CCCGGG",
+    "XbaI": "TCTAGA",
+    "XhoI": "CTCGAG",
+}
+
+
+def find_restriction_sites(sequence, enzymes=RESTRICTION_ENZYMES):
+    """Return {enzyme: [1-based start positions of its recognition site]}."""
+    sites = {}
+    for enzyme, site in enzymes.items():
+        positions = []
+        index = sequence.find(site)
+        while index != -1:
+            positions.append(index + 1)
+            index = sequence.find(site, index + 1)
+        sites[enzyme] = positions
+    return sites
+
 if __name__ == "__main__":
 	example = "ATGGCCATTGTAATGGGCCGCTGAAAGGGTGCCCGATAG"
 	print(f"Length: {len(example)} bp")

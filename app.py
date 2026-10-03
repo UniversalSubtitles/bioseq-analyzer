@@ -1,3 +1,4 @@
+import altair as alt
 import pandas as pd
 import streamlit as st
 
@@ -80,28 +81,111 @@ col2.metric("GC content", f"{seq_tools.gc_content(sequence):.2f}%")
 col3.metric("AT content", f"{seq_tools.at_content(sequence):.2f}%")
 col4.metric("Complete codons", f"{len(sequence) // 3:,}")
 
-# ---------- Nucleotide composition ----------
-st.subheader("Nucleotide composition")
-counts = seq_tools.nucleotide_counts(sequence)
-composition = pd.DataFrame({"Base": list(counts.keys()), "Count": list(counts.values())})
-composition["Percent"] = (composition["Count"] / len(sequence) * 100).round(2)
+composition_tab, sequences_tab, orf_tab, restriction_tab = st.tabs(
+    ["📊 Composition", "🔁 Sequences", "🧬 Open reading frames", "✂️ Restriction sites"]
+)
 
-chart_col, table_col = st.columns([2, 1])
-with chart_col:
-    st.bar_chart(composition, x="Base", y="Count")
-with table_col:
-    st.dataframe(composition, hide_index=True)
+# ---------- Nucleotide composition ----------
+with composition_tab:
+    counts = seq_tools.nucleotide_counts(sequence)
+    composition = pd.DataFrame({"Base": list(counts.keys()), "Count": list(counts.values())})
+    composition["Percent"] = (composition["Count"] / len(sequence) * 100).round(2)
+
+    chart_col, table_col = st.columns([2, 1])
+    with chart_col:
+        composition_chart = (
+            alt.Chart(composition)
+            .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
+            .encode(
+                x=alt.X("Base:N", sort=list("ACGT"), axis=alt.Axis(labelAngle=0)),
+                y=alt.Y("Count:Q"),
+                tooltip=["Base", "Count", alt.Tooltip("Percent:Q", format=".2f")],
+            )
+        )
+        st.altair_chart(composition_chart)
+    with table_col:
+        st.dataframe(composition, hide_index=True)
 
 # ---------- Sequence transformations ----------
-st.subheader("Reverse complement (5'→3')")
-st.code(seq_tools.reverse_complement(sequence), language=None, wrap_lines=True)
+with sequences_tab:
+    st.markdown("**Reverse complement (5'→3')**")
+    st.code(seq_tools.reverse_complement(sequence), language=None, wrap_lines=True)
 
-st.subheader("mRNA (coding strand with T → U)")
-st.code(seq_tools.transcribe(sequence), language=None, wrap_lines=True)
+    st.markdown("**mRNA (coding strand with T → U)**")
+    st.code(seq_tools.transcribe(sequence), language=None, wrap_lines=True)
 
-st.subheader("Protein (reading frame 1)")
-st.code(seq_tools.translate(sequence), language=None, wrap_lines=True)
-st.caption(
-    "* marks a stop codon. This reads straight through from the first base; "
-    "the ORF finder (coming next) will locate true start-to-stop reading frames."
-)
+    st.markdown("**Straight translation (frame +1)**")
+    st.code(seq_tools.translate(sequence), language=None, wrap_lines=True)
+    st.caption(
+        "* marks a stop codon. This reads straight through from the first base; "
+        "see the Open reading frames tab for true start-to-stop coding regions."
+    )
+
+# ---------- Open reading frames ----------
+with orf_tab:
+    min_aa = st.slider("Minimum protein length (amino acids)", 5, 300, 30, step=5)
+    orfs = seq_tools.find_orfs(sequence, min_protein_length=min_aa)
+
+    if not orfs:
+        st.info(f"No ORFs of at least {min_aa} amino acids found. Try lowering the minimum.")
+    else:
+        longest = orfs[0]
+        st.success(
+            f"Found {len(orfs)} ORF(s). Longest: frame {longest['Frame']}, "
+            f"position {longest['Start']}–{longest['End']}, {longest['Length (aa)']} amino acids."
+        )
+        st.markdown("**Protein encoded by the longest ORF**")
+        st.code(longest["Protein"], language=None, wrap_lines=True)
+
+        st.markdown("**All ORFs**")
+        st.dataframe(pd.DataFrame(orfs), hide_index=True)
+    st.caption(
+        "An ORF runs from an ATG start codon to the first in-frame stop codon (TAA, TAG or TGA). "
+        "All six frames are scanned: +1 to +3 on the given strand, −1 to −3 on the reverse complement. "
+        "For minus-strand ORFs, Start is larger than End."
+    )
+
+# ---------- Restriction sites ----------
+with restriction_tab:
+    sites = seq_tools.find_restriction_sites(sequence)
+    summary = pd.DataFrame(
+        {
+            "Enzyme": list(sites.keys()),
+            "Recognition site": [seq_tools.RESTRICTION_ENZYMES[e] for e in sites],
+            "Number of sites": [len(p) for p in sites.values()],
+            "Positions": [", ".join(map(str, p)) if p else "—" for p in sites.values()],
+        }
+    )
+
+    cutters = summary[summary["Number of sites"] > 0]
+    non_cutters = summary[summary["Number of sites"] == 0]["Enzyme"].tolist()
+
+    if cutters.empty:
+        st.info("None of the 12 enzymes cut this sequence.")
+    else:
+        site_rows = pd.DataFrame(
+            [{"Enzyme": e, "Position": p} for e, positions in sites.items() for p in positions]
+        )
+        site_map = (
+            alt.Chart(site_rows)
+            .mark_tick(thickness=3, size=18)
+            .encode(
+                x=alt.X(
+                    "Position:Q",
+                    scale=alt.Scale(domain=[1, len(sequence)]),
+                    title="Position in sequence (bp)",
+                ),
+                y=alt.Y("Enzyme:N", title=None),
+                tooltip=["Enzyme", "Position"],
+            )
+        )
+        st.markdown("**Restriction map**")
+        st.altair_chart(site_map)
+        st.dataframe(cutters, hide_index=True)
+
+    if non_cutters:
+        st.markdown(f"**Non-cutters** (no site in this sequence): {', '.join(non_cutters)}")
+        st.caption(
+            "Non-cutters are useful for cloning: they can open a vector "
+            "without cutting the insert."
+        )
