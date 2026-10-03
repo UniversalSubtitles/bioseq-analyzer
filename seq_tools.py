@@ -66,6 +66,23 @@ def translate(sequence):
 	return protein
 
 
+def parse_fasta(raw_text):
+    """Split FASTA text into a list of (header, sequence) records.
+    Text with no '>' header line is treated as one unnamed sequence."""
+    records = []
+    header, chunks = None, []
+    for line in raw_text.splitlines():
+        line = line.strip()
+        if line.startswith(">"):
+            if header is not None or chunks:
+                records.append((header or "Unnamed sequence", "".join(chunks).upper()))
+            header, chunks = line[1:].strip() or "Unnamed sequence", []
+        elif line:
+            chunks.append("".join(line.split()))
+    if header is not None or chunks:
+        records.append((header or "Unnamed sequence", "".join(chunks).upper()))
+    return records
+
 if __name__ == "__main__":
 	example = "ATGGCCATTGTAATGGGCCGCTGAAAGGGTGCCCGATAG"
 	print(f"Length: {len(example)} bp")
@@ -75,3 +92,4 @@ if __name__ == "__main__":
 	print(f"Reverse complement: {reverse_complement(example)}")
 	print(f"mRNA: {transcribe(example)}")
 	print(f"Protein: {translate(example)}")
+

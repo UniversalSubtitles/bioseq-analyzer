@@ -55,3 +55,10 @@ def test_translation_matches_biopython():
 def test_known_example():
 	assert seq_tools.translate(EXAMPLE) == "MAIVMGR*KGAR*"
 	assert round(seq_tools.gc_content(EXAMPLE), 2) == 56.41
+
+
+def test_parse_fasta_handles_multiple_records_and_plain_text():
+    multi = ">gene1 first\nATG\nCCC\n>gene2\nttt gga\n"
+    assert seq_tools.parse_fasta(multi) == [("gene1 first", "ATGCCC"), ("gene2", "TTTGGA")]
+    assert seq_tools.parse_fasta("atg cc\nGG") == [("Unnamed sequence", "ATGCCGG")]
+    assert seq_tools.parse_fasta("   \n") == []
