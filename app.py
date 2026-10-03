@@ -1,16 +1,18 @@
+from pathlib import Path
+
 import altair as alt
 import pandas as pd
 import streamlit as st
 
 import seq_tools
 
-EXAMPLE = ">example_gene Demo sequence\nATGGCCATTGTAATGGGCCGCTGAAAGGGTGCCCGATAG"
+DEMO_FILE = Path(__file__).parent / "sample_data" / "insulin_NM_000207.fasta"
 
 st.set_page_config(page_title="BioSeq Analyzer", page_icon="🧬", layout="wide")
 
 
 def load_example():
-    st.session_state.pasted_text = EXAMPLE
+    st.session_state.pasted_text = DEMO_FILE.read_text()
 
 
 # ---------- Sidebar ----------
@@ -18,7 +20,8 @@ with st.sidebar:
     st.header("About")
     st.write(
         "BioSeq Analyzer computes core properties of a DNA sequence. "
-        "The analysis functions are written from scratch and validated against Biopython."
+        "The analysis functions are written from scratch in Python and validated "
+        "against Biopython with automated tests."
     )
     st.markdown("Built by **Kareem Damilare Oreoluwa**")
     st.markdown("[Source code on GitHub](https://github.com/damilare-kareem/bioseq-analyzer)")
@@ -37,7 +40,8 @@ if input_method == "Paste sequence":
         height=150,
         placeholder=">my_gene\nATGGCCATTGTAATGGGC...",
     )
-    st.button("Load example sequence", on_click=load_example)
+    if DEMO_FILE.exists():
+        st.button("Load example: human insulin mRNA (NM_000207.3)", on_click=load_example)
     raw_text = st.session_state.get("pasted_text", "")
 else:
     uploaded = st.file_uploader("Upload a FASTA file", type=["fasta", "fa", "fna", "txt"])
@@ -168,7 +172,7 @@ with restriction_tab:
         )
         site_map = (
             alt.Chart(site_rows)
-            .mark_tick(thickness=3, size=18)
+            .mark_tick(thickness=4, size=24)
             .encode(
                 x=alt.X(
                     "Position:Q",
