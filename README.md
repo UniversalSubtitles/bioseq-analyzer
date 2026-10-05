@@ -66,4 +66,4 @@ Python · Streamlit · pandas · Altair · pytest · Biopython (testing only)
 ## Author
 
 **Kareem Damilare Oreoluwa**, Biochemistry, University of Lagos
-[LinkedIn](linkedin.com/in/damilare-kareem-577054298) · [GitHub](https://github.com/damilare-kareem)
+[LinkedIn](linkedin.com/in/damilare-kareem0) · [GitHub](https://github.com/damilare-kareem)
